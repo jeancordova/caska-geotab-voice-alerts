@@ -12,7 +12,6 @@ function probarVoz() {
 }
 
 function probarAlertaManual() {
-
     const unidad = "CAMION-22";
     const geocerca = "Guadalajara";
 
@@ -20,24 +19,35 @@ function probarAlertaManual() {
         `Alerta. La unidad ${unidad} ingresó a la geocerca ${geocerca}`
     );
 
-    document.getElementById("estado").innerText =
-        "Última alerta: " + unidad + " ingresó a " + geocerca;
+    actualizarEstado("Última alerta: " + unidad + " ingresó a " + geocerca);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function actualizarEstado(texto) {
+    const estado = document.getElementById("estado");
 
-    document.getElementById("estado").innerText =
-        "Estado: Add-In iniciado correctamente";
+    if (estado) {
+        estado.innerText = texto;
+    }
 
-    console.log("Caska Voice Alerts iniciado");
+    console.log(texto);
+}
+
+function iniciarAddIn() {
+    actualizarEstado("Estado: Add-In iniciado correctamente");
 
     console.log("===== INICIO PRUEBA API GEOTAB =====");
     console.log("typeof api:", typeof api);
+    console.log("typeof geotab:", typeof geotab);
 
     if (typeof api !== "undefined") {
         console.log("API Geotab detectada");
     } else {
         console.log("API Geotab NO detectada");
     }
+}
 
-});
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", iniciarAddIn);
+} else {
+    iniciarAddIn();
+}
