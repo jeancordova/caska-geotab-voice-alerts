@@ -15,6 +15,8 @@
 <button onclick="probarVoz()">Probar Voz</button>
 <button onclick="probarApiGeotab()">Probar API Geotab</button>
 <button onclick="consultarExcepcionesNuevas()">Consultar Excepciones Nuevas</button>
+<button onclick="detenerAddIn()">Detener Add-In</button>
+<button onclick="reanudarAddIn()">Reanudar Add-In</button>
 
 <div id="estado">Estado: esperando inicialización...</div>
 
@@ -23,9 +25,11 @@ let geotabApi = null;
 let geotabState = null;
 
 let monitoreoIniciado = false;
+let monitoreoActivo = true;
 let consultando = false;
 let fechaInicioMonitoreo = null;
 let ultimaConsulta = null;
+let temporizadorMonitoreo = null;
 let excepcionesAnunciadas = new Set();
 
 const INTERVALO_CONSULTA_MS = 5000;
@@ -57,6 +61,12 @@ function actualizarEstado(texto) {
 }
 
 function hablarAlerta(texto) {
+    if (!monitoreoActivo) {
+        return;
+    }
+
+    speechSynthesis.cancel();
+
     const mensaje = new SpeechSynthesisUtterance(texto);
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
@@ -65,7 +75,12 @@ function hablarAlerta(texto) {
 }
 
 function probarVoz() {
-    hablarAlerta("Alerta de prueba desde Caska");
+    const mensaje = new SpeechSynthesisUtterance("Alerta de prueba desde Caska");
+    mensaje.lang = "es-MX";
+    mensaje.rate = 1;
+    mensaje.pitch = 1;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(mensaje);
 }
 
 function probarApiGeotab() {
@@ -83,7 +98,7 @@ function probarApiGeotab() {
         function (devices) {
             if (devices && devices.length > 0) {
                 actualizarEstado("API Geotab OK. Primer dispositivo: " + devices[0].name);
-                hablarAlerta("Conexión correcta con Geotab");
+                probarVoz();
             } else {
                 actualizarEstado("API Geotab OK, pero no regresó dispositivos");
             }
@@ -101,17 +116,62 @@ function iniciarMonitoreoAutomatico() {
     }
 
     monitoreoIniciado = true;
+    monitoreoActivo = true;
     fechaInicioMonitoreo = new Date();
     ultimaConsulta = new Date();
 
     actualizarEstado("Monitoreo iniciado. Sólo: velocidad, desvío de ruta y detención.");
 
-    setInterval(function () {
-        consultarExcepcionesNuevas();
+    temporizadorMonitoreo = setInterval(function () {
+        if (monitoreoActivo) {
+            consultarExcepcionesNuevas();
+        }
     }, INTERVALO_CONSULTA_MS);
 }
 
+function detenerAddIn() {
+    monitoreoActivo = false;
+    consultando = false;
+
+    if (temporizadorMonitoreo) {
+        clearInterval(temporizadorMonitoreo);
+        temporizadorMonitoreo = null;
+    }
+
+    speechSynthesis.cancel();
+
+    actualizarEstado("Add-In detenido. No se consultarán ni sonarán nuevas alertas.");
+}
+
+function reanudarAddIn() {
+    if (!geotabApi) {
+        actualizarEstado("API Geotab todavía NO disponible");
+        return;
+    }
+
+    monitoreoActivo = true;
+    monitoreoIniciado = true;
+    consultando = false;
+    ultimaConsulta = new Date();
+
+    if (temporizadorMonitoreo) {
+        clearInterval(temporizadorMonitoreo);
+    }
+
+    temporizadorMonitoreo = setInterval(function () {
+        if (monitoreoActivo) {
+            consultarExcepcionesNuevas();
+        }
+    }, INTERVALO_CONSULTA_MS);
+
+    actualizarEstado("Add-In reanudado. Sólo se anunciarán excepciones nuevas desde este momento.");
+}
+
 function consultarExcepcionesNuevas() {
+    if (!monitoreoActivo) {
+        return;
+    }
+
     if (!geotabApi) {
         actualizarEstado("API Geotab todavía NO disponible");
         return;
@@ -160,6 +220,10 @@ function consultarExcepcionesNuevas() {
 }
 
 function procesarExcepcionNueva(excepcion) {
+    if (!monitoreoActivo) {
+        return;
+    }
+
     const idExcepcion = excepcion.id || JSON.stringify(excepcion);
 
     if (excepcionesAnunciadas.has(idExcepcion)) {
@@ -230,8 +294,11 @@ function crearModuloAddIn() {
             geotabApi = api;
             geotabState = state;
 
+            if (monitoreoActivo && !temporizadorMonitoreo) {
+                reanudarAddIn();
+            }
+
             actualizarEstado("Estado: Add-In activo dentro de MyGeotab");
-            iniciarMonitoreoAutomatico();
         },
 
         blur: function () {
