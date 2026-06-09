@@ -1,17 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Caska Geotab Voice Alerts</title>
+    <meta charset="utf-8">
+    <title>Caska Voice Alerts</title>
 </head>
 <body>
 
-    <h1>Caska Geotab Voice Alerts</h1>
+<div id="caskaVoiceAlerts">
+    <h1>Caska Voice Alerts</h1>
+
+    <p>
+        Este Add-In monitorea excepciones de Geotab y las verbaliza por las bocinas de la computadora.
+    </p>
 
     <button onclick="probarVoz()">
         Probar Voz
     </button>
 
-    <script src="main.js"></script>
+    <button onclick="probarAlertaManual()">
+        Probar Alerta Manual
+    </button>
+
+    <div id="estado">
+        Estado: esperando inicialización...
+    </div>
+</div>
+
+<script src="main.js"></script>
 
 </body>
 </html>
