@@ -15,6 +15,7 @@
 
     <button onclick="probarVoz()">Probar Voz</button>
     <button onclick="probarAlertaManual()">Probar Alerta Manual</button>
+    <button onclick="probarApiGeotab()">Probar API Geotab</button>
 
     <div id="estado">
         Estado: esperando inicialización...
@@ -22,24 +23,15 @@
 </div>
 
 <script>
+let geotabApi = null;
+let geotabState = null;
+
 function hablarAlerta(texto) {
     const mensaje = new SpeechSynthesisUtterance(texto);
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
     mensaje.pitch = 1;
     speechSynthesis.speak(mensaje);
-}
-
-function probarVoz() {
-    hablarAlerta("Alerta de prueba desde Caska");
-}
-
-function probarAlertaManual() {
-    const unidad = "CAMION-22";
-    const geocerca = "Guadalajara";
-
-    hablarAlerta(`Alerta. La unidad ${unidad} ingresó a la geocerca ${geocerca}`);
-    actualizarEstado("Última alerta: " + unidad + " ingresó a " + geocerca);
 }
 
 function actualizarEstado(texto) {
@@ -50,25 +42,88 @@ function actualizarEstado(texto) {
     console.log(texto);
 }
 
-function iniciarAddIn() {
-    actualizarEstado("Estado: Add-In iniciado correctamente");
+function probarVoz() {
+    hablarAlerta("Alerta de prueba desde Caska");
+}
 
-    console.log("===== INICIO PRUEBA API GEOTAB =====");
-    console.log("typeof api:", typeof api);
-    console.log("typeof geotab:", typeof geotab);
+function probarAlertaManual() {
+    const unidad = "CAMION-22";
+    const geocerca = "Guadalajara";
 
-    if (typeof api !== "undefined") {
-        console.log("API Geotab detectada");
-    } else {
-        console.log("API Geotab NO detectada");
+    hablarAlerta("Alerta. La unidad " + unidad + " ingresó a la geocerca " + geocerca);
+    actualizarEstado("Última alerta: " + unidad + " ingresó a " + geocerca);
+}
+
+function probarApiGeotab() {
+    if (!geotabApi) {
+        actualizarEstado("API Geotab todavía NO disponible");
+        console.log("geotabApi:", geotabApi);
+        return;
     }
+
+    actualizarEstado("Consultando dispositivos en Geotab...");
+
+    geotabApi.call(
+        "Get",
+        {
+            typeName: "Device",
+            resultsLimit: 5
+        },
+        function (devices) {
+            console.log("Dispositivos recibidos:", devices);
+
+            if (devices && devices.length > 0) {
+                actualizarEstado("API Geotab OK. Primer dispositivo: " + devices[0].name);
+                hablarAlerta("Conexión correcta con Geotab");
+            } else {
+                actualizarEstado("API Geotab OK, pero no regresó dispositivos");
+            }
+        },
+        function (error) {
+            console.error("Error al consultar Geotab:", error);
+            actualizarEstado("Error al consultar API Geotab");
+        }
+    );
 }
 
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", iniciarAddIn);
-} else {
-    iniciarAddIn();
+function crearAddInCaska() {
+    return {
+        initialize: function (api, state, callback) {
+            geotabApi = api;
+            geotabState = state;
+
+            console.log("Initialize ejecutado");
+            console.log("API recibida:", api);
+            console.log("State recibido:", state);
+
+            actualizarEstado("Estado: API Geotab inicializada correctamente");
+
+            callback();
+        },
+
+        focus: function (api, state) {
+            geotabApi = api;
+            geotabState = state;
+
+            console.log("Focus ejecutado");
+            actualizarEstado("Estado: Add-In activo dentro de MyGeotab");
+        },
+
+        blur: function () {
+            console.log("Blur ejecutado");
+        }
+    };
 }
+
+window.geotab = window.geotab || {};
+window.geotab.addin = window.geotab.addin || {};
+
+window.geotab.addin.caskaVoiceAlerts = crearAddInCaska;
+window.geotab.addin.caska_voice_alerts = crearAddInCaska;
+window.geotab.addin.caskaGeotabVoiceAlerts = crearAddInCaska;
+window.geotab.addin.caska_geotab_voice_alerts = crearAddInCaska;
+
+actualizarEstado("Estado: código cargado, esperando API de MyGeotab...");
 </script>
 
 </body>
