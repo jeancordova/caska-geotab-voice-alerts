@@ -9,7 +9,7 @@
 <h1>Caska Voice Alerts</h1>
 
 <p>
-    Este Add-In monitorea excepciones nuevas de Geotab y las verbaliza por las bocinas de la computadora.
+    Este Add-In monitorea sólo excepciones importantes: velocidad, desvío de ruta y detención.
 </p>
 
 <button onclick="probarVoz()">Probar Voz</button>
@@ -29,6 +29,24 @@ let ultimaConsulta = null;
 let excepcionesAnunciadas = new Set();
 
 const INTERVALO_CONSULTA_MS = 5000;
+
+const PALABRAS_CLAVE_PERMITIDAS = [
+    "speed",
+    "speeding",
+    "velocidad",
+    "exceso de velocidad",
+    "route",
+    "ruta",
+    "desvio",
+    "desvío",
+    "detour",
+    "stop",
+    "stopped",
+    "stopping",
+    "detencion",
+    "detención",
+    "parada"
+];
 
 function actualizarEstado(texto) {
     const estado = document.getElementById("estado");
@@ -86,7 +104,7 @@ function iniciarMonitoreoAutomatico() {
     fechaInicioMonitoreo = new Date();
     ultimaConsulta = new Date();
 
-    actualizarEstado("Monitoreo iniciado. Sólo se anunciarán excepciones nuevas.");
+    actualizarEstado("Monitoreo iniciado. Sólo: velocidad, desvío de ruta y detención.");
 
     setInterval(function () {
         consultarExcepcionesNuevas();
@@ -119,7 +137,7 @@ function consultarExcepcionesNuevas() {
             resultsLimit: 50
         },
         function (excepciones) {
-            console.log("Excepciones nuevas recibidas:", excepciones);
+            console.log("Excepciones recibidas:", excepciones);
 
             ultimaConsulta = ahora;
             consultando = false;
@@ -153,10 +171,31 @@ function procesarExcepcionNueva(excepcion) {
     const unidad = obtenerNombreEntidad(excepcion.device, "unidad desconocida");
     const regla = obtenerNombreEntidad(excepcion.rule, "excepción detectada");
 
+    if (!esExcepcionPermitida(regla)) {
+        console.log("Excepción ignorada:", regla);
+        actualizarEstado("Excepción ignorada: " + regla);
+        return;
+    }
+
     const texto = "Alerta. La unidad " + unidad + " generó la excepción " + regla;
 
     actualizarEstado(texto);
     hablarAlerta(texto);
+}
+
+function esExcepcionPermitida(nombreRegla) {
+    const texto = normalizarTexto(nombreRegla);
+
+    return PALABRAS_CLAVE_PERMITIDAS.some(function (palabra) {
+        return texto.includes(normalizarTexto(palabra));
+    });
+}
+
+function normalizarTexto(texto) {
+    return String(texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
 }
 
 function obtenerNombreEntidad(entidad, textoDefault) {
@@ -181,12 +220,7 @@ function crearModuloAddIn() {
             geotabApi = api;
             geotabState = state;
 
-            console.log("Initialize ejecutado");
-            console.log("API recibida:", api);
-            console.log("State recibido:", state);
-
             actualizarEstado("Estado: API Geotab inicializada correctamente");
-
             iniciarMonitoreoAutomatico();
 
             callback();
@@ -196,9 +230,7 @@ function crearModuloAddIn() {
             geotabApi = api;
             geotabState = state;
 
-            console.log("Focus ejecutado");
             actualizarEstado("Estado: Add-In activo dentro de MyGeotab");
-
             iniciarMonitoreoAutomatico();
         },
 
