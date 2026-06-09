@@ -1,0 +1,16 @@
+{
+  "name": "Caska Voice Alerts",
+  "supportEmail": "jeancordova@gmail.com",
+  "version": "1.0",
+  "items": [
+    {
+      "url": "https://jeancordova.github.io/caska-geotab-voice-alerts/",
+      "path": "ActivityLink/",
+      "menuName": {
+        "en": "Caska Voice Alerts",
+        "es": "Alertas de Voz Caska"
+      }
+    }
+  ],
+  "isSigned": false
+}
