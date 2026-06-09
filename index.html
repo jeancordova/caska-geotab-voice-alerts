@@ -75,11 +75,13 @@ function hablarAlerta(texto) {
 }
 
 function probarVoz() {
+    speechSynthesis.cancel();
+
     const mensaje = new SpeechSynthesisUtterance("Alerta de prueba desde Caska");
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
     mensaje.pitch = 1;
-    speechSynthesis.cancel();
+
     speechSynthesis.speak(mensaje);
 }
 
@@ -306,6 +308,12 @@ function crearModuloAddIn() {
         }
     };
 }
+
+window.probarVoz = probarVoz;
+window.probarApiGeotab = probarApiGeotab;
+window.consultarExcepcionesNuevas = consultarExcepcionesNuevas;
+window.detenerAddIn = detenerAddIn;
+window.reanudarAddIn = reanudarAddIn;
 
 geotab.addin.caskaVoiceAlerts = crearModuloAddIn;
 geotab.addin.caska_voice_alerts = crearModuloAddIn;
