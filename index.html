@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Caska Geotab Voice Alerts</title>
+</head>
+<body>
+    <h1>Caska Geotab Voice Alerts</h1>
+
+    <button onclick="probarVoz()">
+        Probar Voz
+    </button>
+
+    <script>
+        function probarVoz() {
+            const mensaje = new SpeechSynthesisUtterance(
+                "Alerta de prueba desde Caska"
+            );
+
+            mensaje.lang = "es-MX";
+
+            speechSynthesis.speak(mensaje);
+        }
+    </script>
+</body>
+</html>
