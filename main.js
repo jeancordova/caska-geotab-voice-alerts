@@ -31,4 +31,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     console.log("Caska Voice Alerts iniciado");
 
+    console.log("===== INICIO PRUEBA API GEOTAB =====");
+    console.log("typeof api:", typeof api);
+
+    if (typeof api !== "undefined") {
+        console.log("API Geotab detectada");
+    } else {
+        console.log("API Geotab NO detectada");
+    }
+
 });
