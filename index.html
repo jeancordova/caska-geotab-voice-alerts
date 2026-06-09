@@ -9,7 +9,7 @@
 <h1>Caska Voice Alerts</h1>
 
 <p>
-    Este Add-In monitorea sólo excepciones importantes: velocidad, desvío de ruta y detención.
+    Modo prueba: este Add-In anunciará cualquier excepción nueva generada en Geotab.
 </p>
 
 <button onclick="probarVoz()">Probar Voz</button>
@@ -36,24 +36,6 @@ let activosPorId = {};
 
 const INTERVALO_CONSULTA_MS = 5000;
 
-const PALABRAS_CLAVE_PERMITIDAS = [
-    "speed",
-    "speeding",
-    "velocidad",
-    "exceso de velocidad",
-    "route",
-    "ruta",
-    "desvio",
-    "desvío",
-    "detour",
-    "stop",
-    "stopped",
-    "stopping",
-    "detencion",
-    "detención",
-    "parada"
-];
-
 function actualizarEstado(texto) {
     const estado = document.getElementById("estado");
     if (estado) {
@@ -73,6 +55,7 @@ function hablarAlerta(texto) {
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
     mensaje.pitch = 1;
+
     speechSynthesis.speak(mensaje);
 }
 
@@ -165,7 +148,7 @@ function iniciarMonitoreoAutomatico() {
 
     cargarActivos();
 
-    actualizarEstado("Monitoreo iniciado. Sólo: velocidad, desvío de ruta y detención.");
+    actualizarEstado("Modo prueba iniciado. Se anunciará cualquier excepción nueva.");
 
     temporizadorMonitoreo = setInterval(function () {
         if (monitoreoActivo) {
@@ -211,7 +194,7 @@ function reanudarAddIn() {
         }
     }, INTERVALO_CONSULTA_MS);
 
-    actualizarEstado("Add-In reanudado. Sólo se anunciarán excepciones nuevas desde este momento.");
+    actualizarEstado("Add-In reanudado. Se anunciará cualquier excepción nueva desde este momento.");
 }
 
 function consultarExcepcionesNuevas() {
@@ -254,6 +237,8 @@ function consultarExcepcionesNuevas() {
                 return;
             }
 
+            actualizarEstado("Excepciones nuevas recibidas: " + excepciones.length);
+
             excepciones.forEach(function (excepcion) {
                 procesarExcepcionNueva(excepcion);
             });
@@ -282,13 +267,7 @@ function procesarExcepcionNueva(excepcion) {
     const unidad = obtenerNombreRealActivo(excepcion.device);
     const regla = obtenerNombreEntidad(excepcion.rule, "excepción detectada");
 
-    if (!esExcepcionPermitida(regla)) {
-        console.log("Excepción ignorada:", regla);
-        actualizarEstado("Excepción ignorada: " + regla);
-        return;
-    }
-
-    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + traducirRegla(regla);
+    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + regla;
 
     actualizarEstado(texto);
     hablarAlerta(texto);
@@ -312,39 +291,6 @@ function obtenerNombreRealActivo(deviceRef) {
     }
 
     return "unidad desconocida";
-}
-
-function traducirRegla(nombreRegla) {
-    const texto = normalizarTexto(nombreRegla);
-
-    if (texto.includes("speed") || texto.includes("velocidad")) {
-        return "exceso de velocidad";
-    }
-
-    if (texto.includes("route") || texto.includes("ruta") || texto.includes("desvio")) {
-        return "desvío de ruta";
-    }
-
-    if (texto.includes("stop") || texto.includes("detencion") || texto.includes("parada")) {
-        return "detención";
-    }
-
-    return nombreRegla;
-}
-
-function esExcepcionPermitida(nombreRegla) {
-    const texto = normalizarTexto(nombreRegla);
-
-    return PALABRAS_CLAVE_PERMITIDAS.some(function (palabra) {
-        return texto.includes(normalizarTexto(palabra));
-    });
-}
-
-function normalizarTexto(texto) {
-    return String(texto || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
 }
 
 function obtenerNombreEntidad(entidad, textoDefault) {
