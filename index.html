@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -44,7 +45,7 @@
 
 <button onclick="probarVoz()">Probar Voz</button>
 <button onclick="probarApiGeotab()">Probar API Geotab</button>
-<button onclick="consultarExcepcionesNuevas()">Consultar Excepciones Nuevas</button>
+<button onclick="consultarFeedExcepciones()">Consultar Excepciones Nuevas</button>
 <button onclick="detenerAddIn()">Detener Add-In</button>
 <button onclick="reanudarAddIn()">Reanudar Add-In</button>
 
@@ -66,9 +67,11 @@ let monitoreoIniciado = false;
 let monitoreoActivo = true;
 let consultando = false;
 
-let fechaInicioMonitoreo = null;
-let ultimaConsulta = null;
 let temporizadorMonitoreo = null;
+let fechaInicioSesion = null;
+
+let versionFeed = null;
+let feedInicializado = false;
 
 let excepcionesProcesadas = new Set();
 
@@ -76,15 +79,16 @@ let activosPorId = {};
 let reglasPorId = {};
 
 const INTERVALO_CONSULTA_MS = 5000;
+const LIMITE_RESULTADOS_FEED = 100;
 
 
 /* =========================================================
-   EXCEPCIONES QUE NO DEBEN SONAR
+   PALABRAS QUE PROVOCAN QUE UNA EXCEPCIÓN SEA IGNORADA
 ========================================================= */
 
 const PALABRAS_EXCLUIDAS = [
     "engine",
-    "Tire"
+    "tire"
 ];
 
 
@@ -270,7 +274,7 @@ function normalizarTexto(texto) {
 
 function traducirNombreRegla(nombreOriginal) {
     if (!nombreOriginal) {
-        return "Excepción detectada";
+        return null;
     }
 
     const nombreLimpio = normalizarTexto(nombreOriginal);
@@ -310,12 +314,12 @@ function traducirNombreRegla(nombreOriginal) {
 
 
 /* =========================================================
-   FILTRO
+   FILTRO DE EXCEPCIONES
 ========================================================= */
 
 function excepcionDebeSerIgnorada(nombreReglaOriginal) {
     if (!nombreReglaOriginal) {
-        return false;
+        return true;
     }
 
     const nombreNormalizado = nombreReglaOriginal
@@ -369,7 +373,6 @@ function probarVoz() {
     window.speechSynthesis.cancel();
 
     const texto = "Alerta de prueba desde Caska";
-
     const mensaje = new SpeechSynthesisUtterance(texto);
 
     mensaje.lang = "es-MX";
@@ -384,7 +387,7 @@ function probarVoz() {
 
 
 /* =========================================================
-   PRUEBA DE API
+   PRUEBA DE LA API
 ========================================================= */
 
 function probarApiGeotab() {
@@ -569,6 +572,89 @@ function cargarDatosIniciales(callbackFinal) {
 
 
 /* =========================================================
+   INICIALIZACIÓN DEL FEED
+========================================================= */
+
+function inicializarFeed(callback) {
+    if (!geotabApi) {
+        actualizarEstado(
+            "Estado: API Geotab no disponible"
+        );
+
+        if (callback) {
+            callback(false);
+        }
+
+        return;
+    }
+
+    actualizarEstado(
+        "Estado: inicializando monitoreo incremental..."
+    );
+
+    geotabApi.call(
+        "GetFeed",
+        {
+            typeName: "ExceptionEvent",
+            resultsLimit: LIMITE_RESULTADOS_FEED
+        },
+        function (resultado) {
+            console.log(
+                "Resultado de inicialización GetFeed:",
+                resultado
+            );
+
+            if (
+                !resultado ||
+                resultado.toVersion === undefined ||
+                resultado.toVersion === null
+            ) {
+                feedInicializado = false;
+
+                actualizarEstado(
+                    "Estado: no se recibió el token de GetFeed"
+                );
+
+                if (callback) {
+                    callback(false);
+                }
+
+                return;
+            }
+
+            versionFeed = resultado.toVersion;
+            feedInicializado = true;
+
+            console.log(
+                "GetFeed inicializado. Versión:",
+                versionFeed
+            );
+
+            if (callback) {
+                callback(true);
+            }
+        },
+        function (error) {
+            feedInicializado = false;
+
+            console.error(
+                "Error al inicializar GetFeed:",
+                error
+            );
+
+            actualizarEstado(
+                "Estado: error al inicializar GetFeed"
+            );
+
+            if (callback) {
+                callback(false);
+            }
+        }
+    );
+}
+
+
+/* =========================================================
    MONITOREO
 ========================================================= */
 
@@ -580,9 +666,7 @@ function iniciarMonitoreoAutomatico() {
     monitoreoIniciado = true;
     monitoreoActivo = true;
     consultando = false;
-
-    fechaInicioMonitoreo = new Date();
-    ultimaConsulta = new Date();
+    fechaInicioSesion = new Date();
 
     actualizarEstado(
         "Estado: cargando información de Geotab..."
@@ -593,11 +677,17 @@ function iniciarMonitoreoAutomatico() {
             return;
         }
 
-        actualizarEstado(
-            "Estado: monitoreo activo"
-        );
+        inicializarFeed(function (correcto) {
+            if (!correcto || !monitoreoActivo) {
+                return;
+            }
 
-        iniciarTemporizadorMonitoreo();
+            actualizarEstado(
+                "Estado: monitoreo activo"
+            );
+
+            iniciarTemporizadorMonitoreo();
+        });
     });
 }
 
@@ -610,7 +700,7 @@ function iniciarTemporizadorMonitoreo() {
     temporizadorMonitoreo = setInterval(
         function () {
             if (monitoreoActivo) {
-                consultarExcepcionesNuevas();
+                consultarFeedExcepciones();
             }
         },
         INTERVALO_CONSULTA_MS
@@ -647,10 +737,14 @@ function reanudarAddIn() {
     monitoreoActivo = true;
     monitoreoIniciado = true;
     consultando = false;
-    ultimaConsulta = new Date();
+    fechaInicioSesion = new Date();
+
+    versionFeed = null;
+    feedInicializado = false;
+    excepcionesProcesadas.clear();
 
     actualizarEstado(
-        "Estado: cargando información de Geotab..."
+        "Estado: preparando monitoreo..."
     );
 
     cargarDatosIniciales(function () {
@@ -658,20 +752,26 @@ function reanudarAddIn() {
             return;
         }
 
-        iniciarTemporizadorMonitoreo();
+        inicializarFeed(function (correcto) {
+            if (!correcto || !monitoreoActivo) {
+                return;
+            }
 
-        actualizarEstado(
-            "Estado: monitoreo activo"
-        );
+            iniciarTemporizadorMonitoreo();
+
+            actualizarEstado(
+                "Estado: monitoreo activo"
+            );
+        });
     });
 }
 
 
 /* =========================================================
-   CONSULTA DE EXCEPCIONES
+   CONSULTA INCREMENTAL GETFEED
 ========================================================= */
 
-function consultarExcepcionesNuevas() {
+function consultarFeedExcepciones() {
     if (!monitoreoActivo) {
         return;
     }
@@ -684,64 +784,98 @@ function consultarExcepcionesNuevas() {
         return;
     }
 
+    if (!feedInicializado || versionFeed === null) {
+        actualizarEstado(
+            "Estado: GetFeed todavía no inicializado"
+        );
+
+        return;
+    }
+
     if (consultando) {
         return;
     }
 
     consultando = true;
 
-    const ahora = new Date();
-
-    const desde =
-        ultimaConsulta ||
-        fechaInicioMonitoreo ||
-        ahora;
+    const versionSolicitada = versionFeed;
 
     geotabApi.call(
-        "Get",
+        "GetFeed",
         {
             typeName: "ExceptionEvent",
-            search: {
-                fromDate: desde.toISOString(),
-                toDate: ahora.toISOString()
-            },
-            resultsLimit: 100
+            fromVersion: versionSolicitada,
+            resultsLimit: LIMITE_RESULTADOS_FEED
         },
-        function (excepciones) {
-            ultimaConsulta = ahora;
+        function (resultado) {
             consultando = false;
+
+            console.log(
+                "Resultado GetFeed:",
+                resultado
+            );
+
+            if (!resultado) {
+                actualizarEstado(
+                    "Estado: respuesta vacía de GetFeed"
+                );
+
+                return;
+            }
+
+            if (
+                resultado.toVersion !== undefined &&
+                resultado.toVersion !== null
+            ) {
+                versionFeed = resultado.toVersion;
+            }
+
+            const excepciones =
+                Array.isArray(resultado.data)
+                    ? resultado.data
+                    : [];
 
             actualizarEstado(
                 "Estado: monitoreo activo"
             );
 
-            if (!excepciones || excepciones.length === 0) {
+            if (excepciones.length === 0) {
                 console.log(
-                    "Consulta completada sin excepciones nuevas."
+                    "GetFeed completado sin cambios nuevos."
                 );
 
                 return;
             }
 
             console.log(
-                "Excepciones recibidas:",
+                "Cambios recibidos por GetFeed:",
                 excepciones
             );
 
             excepciones.forEach(function (excepcion) {
                 procesarExcepcionNueva(excepcion);
             });
+
+            if (
+                excepciones.length >= LIMITE_RESULTADOS_FEED &&
+                monitoreoActivo
+            ) {
+                setTimeout(
+                    consultarFeedExcepciones,
+                    100
+                );
+            }
         },
         function (error) {
             consultando = false;
 
             console.error(
-                "Error al consultar excepciones:",
+                "Error al consultar GetFeed:",
                 error
             );
 
             actualizarEstado(
-                "Estado: error al consultar excepciones"
+                "Estado: error al consultar GetFeed"
             );
         }
     );
@@ -749,7 +883,7 @@ function consultarExcepcionesNuevas() {
 
 
 /* =========================================================
-   PROCESAMIENTO
+   PROCESAMIENTO DE EXCEPCIONES
 ========================================================= */
 
 function procesarExcepcionNueva(excepcion) {
@@ -759,8 +893,19 @@ function procesarExcepcionNueva(excepcion) {
 
     if (excepcionesProcesadas.has(idExcepcion)) {
         console.log(
-            "Excepción repetida ignorada:",
+            "Actualización de excepción ya procesada, ignorada:",
             idExcepcion
+        );
+
+        return;
+    }
+
+    if (!excepcionPerteneceASesionActual(excepcion)) {
+        excepcionesProcesadas.add(idExcepcion);
+
+        console.log(
+            "Excepción anterior al inicio de la sesión, ignorada:",
+            excepcion
         );
 
         return;
@@ -778,6 +923,23 @@ function procesarExcepcionNueva(excepcion) {
             excepcion.rule
         );
 
+    /*
+        Si no se puede resolver el nombre real de la regla,
+        la excepción se ignora y no produce audio.
+    */
+    if (!reglaOriginal) {
+        console.warn(
+            "Excepción ignorada porque no se pudo resolver su regla:",
+            {
+                unidad: unidad,
+                regla: excepcion.rule,
+                excepcion: excepcion
+            }
+        );
+
+        return;
+    }
+
     if (excepcionDebeSerIgnorada(reglaOriginal)) {
         console.log(
             "Excepción ignorada por filtro:",
@@ -794,6 +956,15 @@ function procesarExcepcionNueva(excepcion) {
     const reglaTraducida =
         traducirNombreRegla(reglaOriginal);
 
+    if (!reglaTraducida) {
+        console.warn(
+            "Excepción ignorada porque no se pudo traducir o procesar la regla:",
+            reglaOriginal
+        );
+
+        return;
+    }
+
     const texto =
         "Alerta. La unidad "
         + unidad
@@ -804,23 +975,50 @@ function procesarExcepcionNueva(excepcion) {
 }
 
 
+function excepcionPerteneceASesionActual(excepcion) {
+    if (!fechaInicioSesion) {
+        return true;
+    }
+
+    const fechaEventoTexto =
+        excepcion.activeFrom ||
+        excepcion.dateTime;
+
+    if (!fechaEventoTexto) {
+        return true;
+    }
+
+    const fechaEvento = new Date(fechaEventoTexto);
+
+    if (isNaN(fechaEvento.getTime())) {
+        return true;
+    }
+
+    const inicioConTolerancia =
+        fechaInicioSesion.getTime() - 15000;
+
+    return fechaEvento.getTime() >= inicioConTolerancia;
+}
+
+
 function crearIdentificadorAlternativo(excepcion) {
     const deviceId =
         excepcion.device &&
         excepcion.device.id
-        ? excepcion.device.id
-        : "sin-dispositivo";
+            ? excepcion.device.id
+            : "sin-dispositivo";
 
     const ruleId =
         excepcion.rule &&
         excepcion.rule.id
-        ? excepcion.rule.id
-        : "sin-regla";
+            ? excepcion.rule.id
+            : "sin-regla";
 
     const fecha =
         excepcion.activeFrom ||
         excepcion.dateTime ||
         excepcion.activeTo ||
+        excepcion.version ||
         JSON.stringify(excepcion);
 
     return (
@@ -834,7 +1032,7 @@ function crearIdentificadorAlternativo(excepcion) {
 
 
 /* =========================================================
-   NOMBRES REALES
+   NOMBRE REAL DEL ACTIVO
 ========================================================= */
 
 function obtenerNombreRealActivo(deviceRef) {
@@ -858,9 +1056,13 @@ function obtenerNombreRealActivo(deviceRef) {
 }
 
 
+/* =========================================================
+   NOMBRE REAL DE LA REGLA
+========================================================= */
+
 function obtenerNombreRealRegla(ruleRef) {
     if (!ruleRef) {
-        return "Excepción detectada";
+        return null;
     }
 
     if (
@@ -875,7 +1077,12 @@ function obtenerNombreRealRegla(ruleRef) {
         return ruleRef.name;
     }
 
-    return "Excepción detectada";
+    console.warn(
+        "No se encontró el nombre real de la regla:",
+        ruleRef
+    );
+
+    return null;
 }
 
 
@@ -905,12 +1112,13 @@ function crearModuloAddIn() {
             if (
                 monitoreoActivo &&
                 monitoreoIniciado &&
+                feedInicializado &&
                 !temporizadorMonitoreo
             ) {
                 iniciarTemporizadorMonitoreo();
             }
 
-            if (monitoreoActivo) {
+            if (monitoreoActivo && feedInicializado) {
                 actualizarEstado(
                     "Estado: monitoreo activo"
                 );
@@ -918,7 +1126,9 @@ function crearModuloAddIn() {
         },
 
         blur: function () {
-            console.log("Blur ejecutado");
+            console.log(
+                "Blur ejecutado"
+            );
         }
     };
 }
@@ -928,21 +1138,38 @@ function crearModuloAddIn() {
    BOTONES
 ========================================================= */
 
-window.probarVoz = probarVoz;
-window.probarApiGeotab = probarApiGeotab;
-window.consultarExcepcionesNuevas = consultarExcepcionesNuevas;
-window.detenerAddIn = detenerAddIn;
-window.reanudarAddIn = reanudarAddIn;
+window.probarVoz =
+    probarVoz;
+
+window.probarApiGeotab =
+    probarApiGeotab;
+
+window.consultarFeedExcepciones =
+    consultarFeedExcepciones;
+
+window.detenerAddIn =
+    detenerAddIn;
+
+window.reanudarAddIn =
+    reanudarAddIn;
 
 
 /* =========================================================
-   REGISTRO
+   REGISTRO DEL ADD-IN
 ========================================================= */
 
-geotab.addin.caskaVoiceAlerts = crearModuloAddIn;
-geotab.addin.caska_voice_alerts = crearModuloAddIn;
-geotab.addin.caskaGeotabVoiceAlerts = crearModuloAddIn;
-geotab.addin.caska_geotab_voice_alerts = crearModuloAddIn;
+geotab.addin.caskaVoiceAlerts =
+    crearModuloAddIn;
+
+geotab.addin.caska_voice_alerts =
+    crearModuloAddIn;
+
+geotab.addin.caskaGeotabVoiceAlerts =
+    crearModuloAddIn;
+
+geotab.addin.caska_geotab_voice_alerts =
+    crearModuloAddIn;
+
 
 actualizarEstado(
     "Estado: código cargado, esperando API de MyGeotab..."
@@ -951,3 +1178,4 @@ actualizarEstado(
 
 </body>
 </html>
+```
