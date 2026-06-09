@@ -43,6 +43,16 @@ let reglasCargadas = false;
 
 const INTERVALO_CONSULTA_MS = 5000;
 
+/*
+    Toda excepción cuyo nombre contenga alguna de estas palabras
+    será ignorada.
+
+    La búsqueda no distingue entre mayúsculas y minúsculas.
+*/
+const PALABRAS_EXCLUIDAS = [
+    "engine"
+];
+
 
 /* =========================================================
    ESTADO DEL ADD-IN
@@ -82,9 +92,8 @@ function hablarAlerta(texto) {
     console.log("Alerta enviada a la voz:", texto);
 
     /*
-       No usamos speechSynthesis.cancel() aquí porque,
-       si llegan varias excepciones al mismo tiempo,
-       cancelaríamos la alerta anterior.
+        No utilizamos speechSynthesis.cancel() aquí porque,
+        si llegan varias excepciones juntas, se colocan en cola.
     */
     window.speechSynthesis.speak(mensaje);
 }
@@ -129,7 +138,9 @@ function probarApiGeotab() {
 
             if (devices && devices.length > 0) {
                 const nombreActivo =
-                    devices[0].name || devices[0].id || "activo desconocido";
+                    devices[0].name ||
+                    devices[0].id ||
+                    "activo desconocido";
 
                 actualizarEstado(
                     "API Geotab OK. Primer activo: " + nombreActivo
@@ -194,16 +205,12 @@ function cargarActivos(callback) {
                     devices.length,
                     activosPorId
                 );
-
-                if (callback) {
-                    callback(true);
-                }
             } else {
                 console.warn("No se encontraron activos");
+            }
 
-                if (callback) {
-                    callback(true);
-                }
+            if (callback) {
+                callback(true);
             }
         },
         function (error) {
@@ -260,16 +267,12 @@ function cargarReglas(callback) {
                     rules.length,
                     reglasPorId
                 );
-
-                if (callback) {
-                    callback(true);
-                }
             } else {
                 console.warn("No se encontraron reglas");
+            }
 
-                if (callback) {
-                    callback(true);
-                }
+            if (callback) {
+                callback(true);
             }
         },
         function (error) {
@@ -395,10 +398,6 @@ function reanudarAddIn() {
     monitoreoIniciado = true;
     consultando = false;
 
-    /*
-       Al reanudar, comenzamos a buscar excepciones
-       solamente desde este momento.
-    */
     ultimaConsulta = new Date();
 
     actualizarEstado(
@@ -443,10 +442,11 @@ function consultarExcepcionesNuevas() {
     consultando = true;
 
     const ahora = new Date();
+
     const desde =
-        ultimaConsulta
-        || fechaInicioMonitoreo
-        || ahora;
+        ultimaConsulta ||
+        fechaInicioMonitoreo ||
+        ahora;
 
     console.log(
         "Consultando excepciones desde:",
@@ -507,6 +507,28 @@ function consultarExcepcionesNuevas() {
 
 
 /* =========================================================
+   FILTRO DE EXCEPCIONES
+========================================================= */
+
+function excepcionDebeSerIgnorada(nombreRegla) {
+    if (!nombreRegla) {
+        return false;
+    }
+
+    const nombreNormalizado = nombreRegla
+        .toString()
+        .toLowerCase()
+        .trim();
+
+    return PALABRAS_EXCLUIDAS.some(function (palabra) {
+        return nombreNormalizado.includes(
+            palabra.toLowerCase()
+        );
+    });
+}
+
+
+/* =========================================================
    PROCESAMIENTO DE EXCEPCIONES
 ========================================================= */
 
@@ -521,18 +543,17 @@ function procesarExcepcionNueva(excepcion) {
     );
 
     const idExcepcion =
-        excepcion.id
-        || crearIdentificadorAlternativo(excepcion);
+        excepcion.id ||
+        crearIdentificadorAlternativo(excepcion);
 
     if (excepcionesAnunciadas.has(idExcepcion)) {
         console.log(
-            "Excepción omitida porque ya fue anunciada:",
+            "Excepción omitida porque ya fue procesada:",
             idExcepcion
         );
+
         return;
     }
-
-    excepcionesAnunciadas.add(idExcepcion);
 
     const unidad = obtenerNombreRealActivo(
         excepcion.device
@@ -541,6 +562,25 @@ function procesarExcepcionNueva(excepcion) {
     const regla = obtenerNombreRealRegla(
         excepcion.rule
     );
+
+    /*
+        Se marca como procesada aunque sea ignorada,
+        para evitar revisarla nuevamente.
+    */
+    excepcionesAnunciadas.add(idExcepcion);
+
+    if (excepcionDebeSerIgnorada(regla)) {
+        console.log(
+            "Excepción ignorada por contener una palabra excluida:",
+            {
+                unidad: unidad,
+                regla: regla,
+                id: idExcepcion
+            }
+        );
+
+        return;
+    }
 
     const texto =
         "Alerta. La unidad "
@@ -565,10 +605,10 @@ function crearIdentificadorAlternativo(excepcion) {
         : "sin-regla";
 
     const fecha =
-        excepcion.activeFrom
-        || excepcion.dateTime
-        || excepcion.activeTo
-        || JSON.stringify(excepcion);
+        excepcion.activeFrom ||
+        excepcion.dateTime ||
+        excepcion.activeTo ||
+        JSON.stringify(excepcion);
 
     return deviceId + "|" + ruleId + "|" + fecha;
 }
@@ -584,9 +624,9 @@ function obtenerNombreRealActivo(deviceRef) {
     }
 
     if (
-        deviceRef.id
-        && activosPorId[deviceRef.id]
-        && activosPorId[deviceRef.id].name
+        deviceRef.id &&
+        activosPorId[deviceRef.id] &&
+        activosPorId[deviceRef.id].name
     ) {
         return activosPorId[deviceRef.id].name;
     }
@@ -595,10 +635,6 @@ function obtenerNombreRealActivo(deviceRef) {
         return deviceRef.name;
     }
 
-    /*
-       No se lee el ID interno del activo.
-       Si no encontramos el nombre, usamos un texto comprensible.
-    */
     return "unidad desconocida";
 }
 
@@ -613,9 +649,9 @@ function obtenerNombreRealRegla(ruleRef) {
     }
 
     if (
-        ruleRef.id
-        && reglasPorId[ruleRef.id]
-        && reglasPorId[ruleRef.id].name
+        ruleRef.id &&
+        reglasPorId[ruleRef.id] &&
+        reglasPorId[ruleRef.id].name
     ) {
         return reglasPorId[ruleRef.id].name;
     }
@@ -624,11 +660,6 @@ function obtenerNombreRealRegla(ruleRef) {
         return ruleRef.name;
     }
 
-    /*
-       Ya no devolvemos ruleRef.id porque es un identificador
-       interno incomprensible como:
-       a5WrqzDcxVUeV50FZExrGWg
-    */
     console.warn(
         "No se encontró el nombre de la regla:",
         ruleRef
@@ -669,9 +700,9 @@ function crearModuloAddIn() {
             console.log("Focus ejecutado");
 
             if (
-                monitoreoActivo
-                && monitoreoIniciado
-                && !temporizadorMonitoreo
+                monitoreoActivo &&
+                monitoreoIniciado &&
+                !temporizadorMonitoreo
             ) {
                 iniciarTemporizadorMonitoreo();
             }
