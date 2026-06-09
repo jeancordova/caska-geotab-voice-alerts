@@ -1,53 +1,32 @@
-function hablarAlerta(texto) {
-    const mensaje = new SpeechSynthesisUtterance(texto);
-    mensaje.lang = "es-MX";
-    mensaje.rate = 1;
-    mensaje.pitch = 1;
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Caska Voice Alerts</title>
+</head>
+<body>
 
-    speechSynthesis.speak(mensaje);
-}
+<div id="caskaVoiceAlerts">
+    <h1>Caska Voice Alerts</h1>
 
-function probarVoz() {
-    hablarAlerta("Alerta de prueba desde Caska");
-}
+    <p>
+        Este Add-In monitorea excepciones de Geotab y las verbaliza por las bocinas de la computadora.
+    </p>
 
-function probarAlertaManual() {
-    const unidad = "CAMION-22";
-    const geocerca = "Guadalajara";
+    <button onclick="probarVoz()">
+        Probar Voz
+    </button>
 
-    hablarAlerta(
-        `Alerta. La unidad ${unidad} ingresó a la geocerca ${geocerca}`
-    );
+    <button onclick="probarAlertaManual()">
+        Probar Alerta Manual
+    </button>
 
-    actualizarEstado("Última alerta: " + unidad + " ingresó a " + geocerca);
-}
+    <div id="estado">
+        Estado: esperando inicialización...
+    </div>
+</div>
 
-function actualizarEstado(texto) {
-    const estado = document.getElementById("estado");
+<script src="https://jeancordova.github.io/caska-geotab-voice-alerts/main.js?v=3"></script>
 
-    if (estado) {
-        estado.innerText = texto;
-    }
-
-    console.log(texto);
-}
-
-function iniciarAddIn() {
-    actualizarEstado("Estado: Add-In iniciado correctamente");
-
-    console.log("===== INICIO PRUEBA API GEOTAB =====");
-    console.log("typeof api:", typeof api);
-    console.log("typeof geotab:", typeof geotab);
-
-    if (typeof api !== "undefined") {
-        console.log("API Geotab detectada");
-    } else {
-        console.log("API Geotab NO detectada");
-    }
-}
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", iniciarAddIn);
-} else {
-    iniciarAddIn();
-}
+</body>
+</html>
