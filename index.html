@@ -13,14 +13,15 @@
 </p>
 
 <button onclick="probarVoz()">Probar Voz</button>
-<button onclick="probarAlertaManual()">Probar Alerta Manual</button>
 <button onclick="probarApiGeotab()">Probar API Geotab</button>
+<button onclick="consultarUltimasExcepciones()">Consultar Excepciones</button>
 
 <div id="estado">Estado: esperando inicialización...</div>
 
 <script>
 let geotabApi = null;
 let geotabState = null;
+let excepcionesAnunciadas = new Set();
 
 function actualizarEstado(texto) {
     const estado = document.getElementById("estado");
@@ -42,19 +43,11 @@ function probarVoz() {
     hablarAlerta("Alerta de prueba desde Caska");
 }
 
-function probarAlertaManual() {
-    hablarAlerta("Alerta. La unidad CAMION-22 ingresó a la geocerca Guadalajara");
-    actualizarEstado("Última alerta: CAMION-22 ingresó a Guadalajara");
-}
-
 function probarApiGeotab() {
     if (!geotabApi) {
         actualizarEstado("API Geotab todavía NO disponible");
-        console.log("geotabApi:", geotabApi);
         return;
     }
-
-    actualizarEstado("Consultando dispositivos en Geotab...");
 
     geotabApi.call(
         "Get",
@@ -63,8 +56,6 @@ function probarApiGeotab() {
             resultsLimit: 5
         },
         function (devices) {
-            console.log("Dispositivos recibidos:", devices);
-
             if (devices && devices.length > 0) {
                 actualizarEstado("API Geotab OK. Primer dispositivo: " + devices[0].name);
                 hablarAlerta("Conexión correcta con Geotab");
@@ -77,6 +68,90 @@ function probarApiGeotab() {
             actualizarEstado("Error al consultar API Geotab");
         }
     );
+}
+
+function consultarUltimasExcepciones() {
+    if (!geotabApi) {
+        actualizarEstado("API Geotab todavía NO disponible");
+        return;
+    }
+
+    const ahora = new Date();
+    const hace15Minutos = new Date(ahora.getTime() - 15 * 60 * 1000);
+
+    actualizarEstado("Consultando excepciones recientes...");
+
+    geotabApi.call(
+        "Get",
+        {
+            typeName: "ExceptionEvent",
+            search: {
+                fromDate: hace15Minutos.toISOString(),
+                toDate: ahora.toISOString()
+            },
+            resultsLimit: 10
+        },
+        function (excepciones) {
+            console.log("Excepciones recibidas:", excepciones);
+
+            if (!excepciones || excepciones.length === 0) {
+                actualizarEstado("No se encontraron excepciones recientes");
+                return;
+            }
+
+            actualizarEstado("Excepciones encontradas: " + excepciones.length);
+
+            excepciones.forEach(function (excepcion) {
+                anunciarExcepcion(excepcion);
+            });
+        },
+        function (error) {
+            console.error("Error al consultar excepciones:", error);
+            actualizarEstado("Error al consultar excepciones");
+        }
+    );
+}
+
+function anunciarExcepcion(excepcion) {
+    const idExcepcion = excepcion.id || JSON.stringify(excepcion);
+
+    if (excepcionesAnunciadas.has(idExcepcion)) {
+        return;
+    }
+
+    excepcionesAnunciadas.add(idExcepcion);
+
+    const unidad = obtenerNombreEntidad(excepcion.device, "unidad desconocida");
+    const regla = obtenerNombreEntidad(excepcion.rule, "excepción detectada");
+
+    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + regla;
+
+    actualizarEstado(texto);
+    hablarAlerta(texto);
+}
+
+function obtenerNombreEntidad(entidad, textoDefault) {
+    if (!entidad) {
+        return textoDefault;
+    }
+
+    if (entidad.name) {
+        return entidad.name;
+    }
+
+    if (entidad.id) {
+        return entidad.id;
+    }
+
+    return textoDefault;
+}
+
+function iniciarMonitoreoAutomatico() {
+    consultarUltimasExcepciones();
+
+    setInterval(function () {
+        consultarUltimasExcepciones();
+    }, 30000);
 }
 
 function crearModuloAddIn() {
@@ -113,7 +188,7 @@ geotab.addin.caska_voice_alerts = crearModuloAddIn;
 geotab.addin.caskaGeotabVoiceAlerts = crearModuloAddIn;
 geotab.addin.caska_geotab_voice_alerts = crearModuloAddIn;
 
-actualizarEstado("Estado: código nuevo cargado, esperando API de MyGeotab...");
+actualizarEstado("Estado: código cargado, esperando API de MyGeotab...");
 </script>
 
 </body>
