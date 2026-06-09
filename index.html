@@ -32,6 +32,8 @@ let ultimaConsulta = null;
 let temporizadorMonitoreo = null;
 let excepcionesAnunciadas = new Set();
 
+let activosPorId = {};
+
 const INTERVALO_CONSULTA_MS = 5000;
 
 const PALABRAS_CLAVE_PERMITIDAS = [
@@ -98,16 +100,55 @@ function probarApiGeotab() {
             resultsLimit: 5
         },
         function (devices) {
+            console.log("Dispositivos recibidos:", devices);
+
             if (devices && devices.length > 0) {
-                actualizarEstado("API Geotab OK. Primer dispositivo: " + devices[0].name);
-                probarVoz();
+                actualizarEstado("API Geotab OK. Primer activo: " + devices[0].name);
+                hablarAlerta("Conexión correcta con Geotab. Primer activo encontrado: " + devices[0].name);
             } else {
-                actualizarEstado("API Geotab OK, pero no regresó dispositivos");
+                actualizarEstado("API Geotab OK, pero no regresó activos");
             }
         },
         function (error) {
-            console.error("Error al consultar dispositivos:", error);
+            console.error("Error al consultar activos:", error);
             actualizarEstado("Error al consultar API Geotab");
+        }
+    );
+}
+
+function cargarActivos() {
+    if (!geotabApi) {
+        actualizarEstado("API Geotab todavía NO disponible para cargar activos");
+        return;
+    }
+
+    actualizarEstado("Cargando nombres reales de activos...");
+
+    geotabApi.call(
+        "Get",
+        {
+            typeName: "Device",
+            resultsLimit: 5000
+        },
+        function (devices) {
+            activosPorId = {};
+
+            if (devices && devices.length > 0) {
+                devices.forEach(function (device) {
+                    if (device.id) {
+                        activosPorId[device.id] = device;
+                    }
+                });
+
+                actualizarEstado("Activos cargados: " + devices.length);
+                console.log("Mapa de activos cargado:", activosPorId);
+            } else {
+                actualizarEstado("No se encontraron activos para cargar nombres");
+            }
+        },
+        function (error) {
+            console.error("Error al cargar activos:", error);
+            actualizarEstado("Error al cargar nombres de activos");
         }
     );
 }
@@ -121,6 +162,8 @@ function iniciarMonitoreoAutomatico() {
     monitoreoActivo = true;
     fechaInicioMonitoreo = new Date();
     ultimaConsulta = new Date();
+
+    cargarActivos();
 
     actualizarEstado("Monitoreo iniciado. Sólo: velocidad, desvío de ruta y detención.");
 
@@ -155,6 +198,8 @@ function reanudarAddIn() {
     monitoreoIniciado = true;
     consultando = false;
     ultimaConsulta = new Date();
+
+    cargarActivos();
 
     if (temporizadorMonitoreo) {
         clearInterval(temporizadorMonitoreo);
@@ -234,7 +279,7 @@ function procesarExcepcionNueva(excepcion) {
 
     excepcionesAnunciadas.add(idExcepcion);
 
-    const unidad = obtenerNombreEntidad(excepcion.device, "unidad desconocida");
+    const unidad = obtenerNombreRealActivo(excepcion.device);
     const regla = obtenerNombreEntidad(excepcion.rule, "excepción detectada");
 
     if (!esExcepcionPermitida(regla)) {
@@ -243,10 +288,48 @@ function procesarExcepcionNueva(excepcion) {
         return;
     }
 
-    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + regla;
+    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + traducirRegla(regla);
 
     actualizarEstado(texto);
     hablarAlerta(texto);
+}
+
+function obtenerNombreRealActivo(deviceRef) {
+    if (!deviceRef) {
+        return "unidad desconocida";
+    }
+
+    if (deviceRef.id && activosPorId[deviceRef.id] && activosPorId[deviceRef.id].name) {
+        return activosPorId[deviceRef.id].name;
+    }
+
+    if (deviceRef.name) {
+        return deviceRef.name;
+    }
+
+    if (deviceRef.id) {
+        return deviceRef.id;
+    }
+
+    return "unidad desconocida";
+}
+
+function traducirRegla(nombreRegla) {
+    const texto = normalizarTexto(nombreRegla);
+
+    if (texto.includes("speed") || texto.includes("velocidad")) {
+        return "exceso de velocidad";
+    }
+
+    if (texto.includes("route") || texto.includes("ruta") || texto.includes("desvio")) {
+        return "desvío de ruta";
+    }
+
+    if (texto.includes("stop") || texto.includes("detencion") || texto.includes("parada")) {
+        return "detención";
+    }
+
+    return nombreRegla;
 }
 
 function esExcepcionPermitida(nombreRegla) {
