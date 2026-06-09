@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
     <meta charset="utf-8">
     <title>Caska Voice Alerts</title>
 </head>
+
 <body>
 
 <h1>Caska Voice Alerts</h1>
@@ -27,48 +28,89 @@ let geotabState = null;
 let monitoreoIniciado = false;
 let monitoreoActivo = true;
 let consultando = false;
+
 let fechaInicioMonitoreo = null;
 let ultimaConsulta = null;
 let temporizadorMonitoreo = null;
+
 let excepcionesAnunciadas = new Set();
 
 let activosPorId = {};
+let reglasPorId = {};
+
+let activosCargados = false;
+let reglasCargadas = false;
 
 const INTERVALO_CONSULTA_MS = 5000;
 
+
+/* =========================================================
+   ESTADO DEL ADD-IN
+========================================================= */
+
 function actualizarEstado(texto) {
     const estado = document.getElementById("estado");
+
     if (estado) {
         estado.innerText = texto;
     }
+
     console.log(texto);
 }
+
+
+/* =========================================================
+   VOZ
+========================================================= */
 
 function hablarAlerta(texto) {
     if (!monitoreoActivo) {
         return;
     }
 
-    speechSynthesis.cancel();
-
     const mensaje = new SpeechSynthesisUtterance(texto);
+
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
     mensaje.pitch = 1;
+    mensaje.volume = 1;
 
-    speechSynthesis.speak(mensaje);
+    mensaje.onerror = function (evento) {
+        console.error("Error de síntesis de voz:", evento);
+    };
+
+    console.log("Alerta enviada a la voz:", texto);
+
+    /*
+       No usamos speechSynthesis.cancel() aquí porque,
+       si llegan varias excepciones al mismo tiempo,
+       cancelaríamos la alerta anterior.
+    */
+    window.speechSynthesis.speak(mensaje);
 }
+
 
 function probarVoz() {
-    speechSynthesis.cancel();
+    window.speechSynthesis.cancel();
 
-    const mensaje = new SpeechSynthesisUtterance("Alerta de prueba desde Caska");
+    const mensaje = new SpeechSynthesisUtterance(
+        "Alerta de prueba desde Caska"
+    );
+
     mensaje.lang = "es-MX";
     mensaje.rate = 1;
     mensaje.pitch = 1;
+    mensaje.volume = 1;
 
-    speechSynthesis.speak(mensaje);
+    window.speechSynthesis.speak(mensaje);
+
+    actualizarEstado("Prueba de voz ejecutada.");
 }
+
+
+/* =========================================================
+   PRUEBA DE LA API
+========================================================= */
 
 function probarApiGeotab() {
     if (!geotabApi) {
@@ -86,10 +128,21 @@ function probarApiGeotab() {
             console.log("Dispositivos recibidos:", devices);
 
             if (devices && devices.length > 0) {
-                actualizarEstado("API Geotab OK. Primer activo: " + devices[0].name);
-                hablarAlerta("Conexión correcta con Geotab. Primer activo encontrado: " + devices[0].name);
+                const nombreActivo =
+                    devices[0].name || devices[0].id || "activo desconocido";
+
+                actualizarEstado(
+                    "API Geotab OK. Primer activo: " + nombreActivo
+                );
+
+                hablarAlerta(
+                    "Conexión correcta con Geotab. Primer activo encontrado: "
+                    + nombreActivo
+                );
             } else {
-                actualizarEstado("API Geotab OK, pero no regresó activos");
+                actualizarEstado(
+                    "API Geotab OK, pero no regresó activos"
+                );
             }
         },
         function (error) {
@@ -99,13 +152,25 @@ function probarApiGeotab() {
     );
 }
 
-function cargarActivos() {
+
+/* =========================================================
+   CARGA DE ACTIVOS
+========================================================= */
+
+function cargarActivos(callback) {
     if (!geotabApi) {
-        actualizarEstado("API Geotab todavía NO disponible para cargar activos");
+        actualizarEstado(
+            "API Geotab todavía NO disponible para cargar activos"
+        );
+
+        if (callback) {
+            callback(false);
+        }
+
         return;
     }
 
-    actualizarEstado("Cargando nombres reales de activos...");
+    console.log("Cargando nombres reales de activos...");
 
     geotabApi.call(
         "Get",
@@ -115,6 +180,7 @@ function cargarActivos() {
         },
         function (devices) {
             activosPorId = {};
+            activosCargados = true;
 
             if (devices && devices.length > 0) {
                 devices.forEach(function (device) {
@@ -123,18 +189,141 @@ function cargarActivos() {
                     }
                 });
 
-                actualizarEstado("Activos cargados: " + devices.length);
-                console.log("Mapa de activos cargado:", activosPorId);
+                console.log(
+                    "Activos cargados:",
+                    devices.length,
+                    activosPorId
+                );
+
+                if (callback) {
+                    callback(true);
+                }
             } else {
-                actualizarEstado("No se encontraron activos para cargar nombres");
+                console.warn("No se encontraron activos");
+
+                if (callback) {
+                    callback(true);
+                }
             }
         },
         function (error) {
+            activosCargados = false;
+
             console.error("Error al cargar activos:", error);
-            actualizarEstado("Error al cargar nombres de activos");
+
+            if (callback) {
+                callback(false);
+            }
         }
     );
 }
+
+
+/* =========================================================
+   CARGA DE REGLAS
+========================================================= */
+
+function cargarReglas(callback) {
+    if (!geotabApi) {
+        actualizarEstado(
+            "API Geotab todavía NO disponible para cargar reglas"
+        );
+
+        if (callback) {
+            callback(false);
+        }
+
+        return;
+    }
+
+    console.log("Cargando nombres reales de reglas...");
+
+    geotabApi.call(
+        "Get",
+        {
+            typeName: "Rule",
+            resultsLimit: 5000
+        },
+        function (rules) {
+            reglasPorId = {};
+            reglasCargadas = true;
+
+            if (rules && rules.length > 0) {
+                rules.forEach(function (rule) {
+                    if (rule.id) {
+                        reglasPorId[rule.id] = rule;
+                    }
+                });
+
+                console.log(
+                    "Reglas cargadas:",
+                    rules.length,
+                    reglasPorId
+                );
+
+                if (callback) {
+                    callback(true);
+                }
+            } else {
+                console.warn("No se encontraron reglas");
+
+                if (callback) {
+                    callback(true);
+                }
+            }
+        },
+        function (error) {
+            reglasCargadas = false;
+
+            console.error("Error al cargar reglas:", error);
+
+            if (callback) {
+                callback(false);
+            }
+        }
+    );
+}
+
+
+/* =========================================================
+   CARGA INICIAL
+========================================================= */
+
+function cargarDatosIniciales(callbackFinal) {
+    let cargaActivosTerminada = false;
+    let cargaReglasTerminada = false;
+
+    function verificarFinalizacion() {
+        if (cargaActivosTerminada && cargaReglasTerminada) {
+            actualizarEstado(
+                "Datos cargados. Activos: "
+                + Object.keys(activosPorId).length
+                + ". Reglas: "
+                + Object.keys(reglasPorId).length
+                + "."
+            );
+
+            if (callbackFinal) {
+                callbackFinal();
+            }
+        }
+    }
+
+    cargarActivos(function () {
+        cargaActivosTerminada = true;
+        verificarFinalizacion();
+    });
+
+    cargarReglas(function () {
+        cargaReglasTerminada = true;
+        verificarFinalizacion();
+    });
+}
+
+
+/* =========================================================
+   MONITOREO
+========================================================= */
 
 function iniciarMonitoreoAutomatico() {
     if (monitoreoIniciado) {
@@ -143,12 +332,33 @@ function iniciarMonitoreoAutomatico() {
 
     monitoreoIniciado = true;
     monitoreoActivo = true;
+    consultando = false;
+
     fechaInicioMonitoreo = new Date();
     ultimaConsulta = new Date();
 
-    cargarActivos();
+    actualizarEstado(
+        "Cargando activos y reglas de Geotab..."
+    );
 
-    actualizarEstado("Modo prueba iniciado. Se anunciará cualquier excepción nueva.");
+    cargarDatosIniciales(function () {
+        if (!monitoreoActivo) {
+            return;
+        }
+
+        actualizarEstado(
+            "Modo prueba iniciado. Se anunciará cualquier excepción nueva."
+        );
+
+        iniciarTemporizadorMonitoreo();
+    });
+}
+
+
+function iniciarTemporizadorMonitoreo() {
+    if (temporizadorMonitoreo) {
+        clearInterval(temporizadorMonitoreo);
+    }
 
     temporizadorMonitoreo = setInterval(function () {
         if (monitoreoActivo) {
@@ -156,6 +366,7 @@ function iniciarMonitoreoAutomatico() {
         }
     }, INTERVALO_CONSULTA_MS);
 }
+
 
 function detenerAddIn() {
     monitoreoActivo = false;
@@ -166,10 +377,13 @@ function detenerAddIn() {
         temporizadorMonitoreo = null;
     }
 
-    speechSynthesis.cancel();
+    window.speechSynthesis.cancel();
 
-    actualizarEstado("Add-In detenido. No se consultarán ni sonarán nuevas alertas.");
+    actualizarEstado(
+        "Add-In detenido. No se consultarán ni sonarán nuevas alertas."
+    );
 }
+
 
 function reanudarAddIn() {
     if (!geotabApi) {
@@ -180,22 +394,34 @@ function reanudarAddIn() {
     monitoreoActivo = true;
     monitoreoIniciado = true;
     consultando = false;
+
+    /*
+       Al reanudar, comenzamos a buscar excepciones
+       solamente desde este momento.
+    */
     ultimaConsulta = new Date();
 
-    cargarActivos();
+    actualizarEstado(
+        "Recargando nombres de activos y reglas..."
+    );
 
-    if (temporizadorMonitoreo) {
-        clearInterval(temporizadorMonitoreo);
-    }
-
-    temporizadorMonitoreo = setInterval(function () {
-        if (monitoreoActivo) {
-            consultarExcepcionesNuevas();
+    cargarDatosIniciales(function () {
+        if (!monitoreoActivo) {
+            return;
         }
-    }, INTERVALO_CONSULTA_MS);
 
-    actualizarEstado("Add-In reanudado. Se anunciará cualquier excepción nueva desde este momento.");
+        iniciarTemporizadorMonitoreo();
+
+        actualizarEstado(
+            "Add-In reanudado. Se anunciará cualquier excepción nueva desde este momento."
+        );
+    });
 }
+
+
+/* =========================================================
+   CONSULTA DE EXCEPCIONES
+========================================================= */
 
 function consultarExcepcionesNuevas() {
     if (!monitoreoActivo) {
@@ -208,13 +434,26 @@ function consultarExcepcionesNuevas() {
     }
 
     if (consultando) {
+        console.log(
+            "Consulta omitida porque ya existe otra consulta en ejecución."
+        );
         return;
     }
 
     consultando = true;
 
     const ahora = new Date();
-    const desde = ultimaConsulta || fechaInicioMonitoreo || ahora;
+    const desde =
+        ultimaConsulta
+        || fechaInicioMonitoreo
+        || ahora;
+
+    console.log(
+        "Consultando excepciones desde:",
+        desde.toISOString(),
+        "hasta:",
+        ahora.toISOString()
+    );
 
     geotabApi.call(
         "Get",
@@ -224,61 +463,131 @@ function consultarExcepcionesNuevas() {
                 fromDate: desde.toISOString(),
                 toDate: ahora.toISOString()
             },
-            resultsLimit: 50
+            resultsLimit: 100
         },
         function (excepciones) {
-            console.log("Excepciones recibidas:", excepciones);
+            console.log(
+                "Excepciones recibidas:",
+                excepciones
+            );
 
             ultimaConsulta = ahora;
             consultando = false;
 
             if (!excepciones || excepciones.length === 0) {
-                actualizarEstado("Monitoreando. Sin excepciones nuevas.");
+                actualizarEstado(
+                    "Monitoreando. Sin excepciones nuevas."
+                );
                 return;
             }
 
-            actualizarEstado("Excepciones nuevas recibidas: " + excepciones.length);
+            actualizarEstado(
+                "Excepciones nuevas recibidas: "
+                + excepciones.length
+            );
 
             excepciones.forEach(function (excepcion) {
                 procesarExcepcionNueva(excepcion);
             });
         },
         function (error) {
-            console.error("Error al consultar excepciones:", error);
-            actualizarEstado("Error al consultar excepciones");
+            console.error(
+                "Error al consultar excepciones:",
+                error
+            );
+
+            actualizarEstado(
+                "Error al consultar excepciones"
+            );
+
             consultando = false;
         }
     );
 }
+
+
+/* =========================================================
+   PROCESAMIENTO DE EXCEPCIONES
+========================================================= */
 
 function procesarExcepcionNueva(excepcion) {
     if (!monitoreoActivo) {
         return;
     }
 
-    const idExcepcion = excepcion.id || JSON.stringify(excepcion);
+    console.log(
+        "Procesando excepción completa:",
+        excepcion
+    );
+
+    const idExcepcion =
+        excepcion.id
+        || crearIdentificadorAlternativo(excepcion);
 
     if (excepcionesAnunciadas.has(idExcepcion)) {
+        console.log(
+            "Excepción omitida porque ya fue anunciada:",
+            idExcepcion
+        );
         return;
     }
 
     excepcionesAnunciadas.add(idExcepcion);
 
-    const unidad = obtenerNombreRealActivo(excepcion.device);
-    const regla = obtenerNombreEntidad(excepcion.rule, "excepción detectada");
+    const unidad = obtenerNombreRealActivo(
+        excepcion.device
+    );
 
-    const texto = "Alerta. La unidad " + unidad + " generó la excepción " + regla;
+    const regla = obtenerNombreRealRegla(
+        excepcion.rule
+    );
+
+    const texto =
+        "Alerta. La unidad "
+        + unidad
+        + " generó la excepción "
+        + regla;
 
     actualizarEstado(texto);
     hablarAlerta(texto);
 }
+
+
+function crearIdentificadorAlternativo(excepcion) {
+    const deviceId =
+        excepcion.device && excepcion.device.id
+        ? excepcion.device.id
+        : "sin-dispositivo";
+
+    const ruleId =
+        excepcion.rule && excepcion.rule.id
+        ? excepcion.rule.id
+        : "sin-regla";
+
+    const fecha =
+        excepcion.activeFrom
+        || excepcion.dateTime
+        || excepcion.activeTo
+        || JSON.stringify(excepcion);
+
+    return deviceId + "|" + ruleId + "|" + fecha;
+}
+
+
+/* =========================================================
+   NOMBRE REAL DEL ACTIVO
+========================================================= */
 
 function obtenerNombreRealActivo(deviceRef) {
     if (!deviceRef) {
         return "unidad desconocida";
     }
 
-    if (deviceRef.id && activosPorId[deviceRef.id] && activosPorId[deviceRef.id].name) {
+    if (
+        deviceRef.id
+        && activosPorId[deviceRef.id]
+        && activosPorId[deviceRef.id].name
+    ) {
         return activosPorId[deviceRef.id].name;
     }
 
@@ -286,28 +595,52 @@ function obtenerNombreRealActivo(deviceRef) {
         return deviceRef.name;
     }
 
-    if (deviceRef.id) {
-        return deviceRef.id;
-    }
-
+    /*
+       No se lee el ID interno del activo.
+       Si no encontramos el nombre, usamos un texto comprensible.
+    */
     return "unidad desconocida";
 }
 
-function obtenerNombreEntidad(entidad, textoDefault) {
-    if (!entidad) {
-        return textoDefault;
+
+/* =========================================================
+   NOMBRE REAL DE LA REGLA
+========================================================= */
+
+function obtenerNombreRealRegla(ruleRef) {
+    if (!ruleRef) {
+        return "excepción detectada";
     }
 
-    if (entidad.name) {
-        return entidad.name;
+    if (
+        ruleRef.id
+        && reglasPorId[ruleRef.id]
+        && reglasPorId[ruleRef.id].name
+    ) {
+        return reglasPorId[ruleRef.id].name;
     }
 
-    if (entidad.id) {
-        return entidad.id;
+    if (ruleRef.name) {
+        return ruleRef.name;
     }
 
-    return textoDefault;
+    /*
+       Ya no devolvemos ruleRef.id porque es un identificador
+       interno incomprensible como:
+       a5WrqzDcxVUeV50FZExrGWg
+    */
+    console.warn(
+        "No se encontró el nombre de la regla:",
+        ruleRef
+    );
+
+    return "excepción detectada";
 }
+
+
+/* =========================================================
+   CICLO DE VIDA DEL ADD-IN
+========================================================= */
 
 function crearModuloAddIn() {
     return {
@@ -315,7 +648,15 @@ function crearModuloAddIn() {
             geotabApi = api;
             geotabState = state;
 
-            actualizarEstado("Estado: API Geotab inicializada correctamente");
+            console.log(
+                "API Geotab inicializada:",
+                geotabApi
+            );
+
+            actualizarEstado(
+                "Estado: API Geotab inicializada correctamente"
+            );
+
             iniciarMonitoreoAutomatico();
 
             callback();
@@ -325,11 +666,19 @@ function crearModuloAddIn() {
             geotabApi = api;
             geotabState = state;
 
-            if (monitoreoActivo && !temporizadorMonitoreo) {
-                reanudarAddIn();
+            console.log("Focus ejecutado");
+
+            if (
+                monitoreoActivo
+                && monitoreoIniciado
+                && !temporizadorMonitoreo
+            ) {
+                iniciarTemporizadorMonitoreo();
             }
 
-            actualizarEstado("Estado: Add-In activo dentro de MyGeotab");
+            actualizarEstado(
+                "Estado: Add-In activo dentro de MyGeotab"
+            );
         },
 
         blur: function () {
@@ -338,18 +687,30 @@ function crearModuloAddIn() {
     };
 }
 
+
+/* =========================================================
+   FUNCIONES DISPONIBLES PARA LOS BOTONES
+========================================================= */
+
 window.probarVoz = probarVoz;
 window.probarApiGeotab = probarApiGeotab;
 window.consultarExcepcionesNuevas = consultarExcepcionesNuevas;
 window.detenerAddIn = detenerAddIn;
 window.reanudarAddIn = reanudarAddIn;
 
+
+/* =========================================================
+   REGISTRO DEL ADD-IN
+========================================================= */
+
 geotab.addin.caskaVoiceAlerts = crearModuloAddIn;
 geotab.addin.caska_voice_alerts = crearModuloAddIn;
 geotab.addin.caskaGeotabVoiceAlerts = crearModuloAddIn;
 geotab.addin.caska_geotab_voice_alerts = crearModuloAddIn;
 
-actualizarEstado("Estado: código cargado, esperando API de MyGeotab...");
+actualizarEstado(
+    "Estado: código cargado, esperando API de MyGeotab..."
+);
 </script>
 
 </body>
