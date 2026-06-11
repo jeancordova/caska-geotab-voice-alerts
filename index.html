@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -40,7 +39,7 @@
 <h1>Caska Voice Alerts</h1>
 
 <p>
-    Este Add-In anuncia las excepciones nuevas autorizadas.
+    Este Add-In anuncia únicamente alertas de desvío de ruta y detención.
 </p>
 
 <button onclick="probarVoz()">Probar Voz</button>
@@ -83,12 +82,26 @@ const LIMITE_RESULTADOS_FEED = 100;
 
 
 /* =========================================================
-   PALABRAS QUE PROVOCAN QUE UNA EXCEPCIÓN SEA IGNORADA
+   SOLO ESTAS ALERTAS PUEDEN SONAR
 ========================================================= */
 
-const PALABRAS_EXCLUIDAS = [
-    "engine",
-    "tire"
+const PALABRAS_PERMITIDAS = [
+    "desvio de ruta",
+    "desviacion de ruta",
+    "desviacion",
+    "route deviation",
+    "route violation",
+
+    "detenido",
+    "detenida",
+    "detencion",
+    "unidad detenida",
+    "vehiculo detenido",
+    "vehicle stopped",
+    "stopped",
+    "stop",
+    "unauthorized stop",
+    "excessive stop"
 ];
 
 
@@ -97,34 +110,6 @@ const PALABRAS_EXCLUIDAS = [
 ========================================================= */
 
 const TRADUCCIONES_EXACTAS = {
-    "speeding": "Exceso de velocidad",
-    "speeding exception": "Exceso de velocidad",
-    "maximum speed exceeded": "Velocidad máxima excedida",
-    "speed limit exceeded": "Límite de velocidad excedido",
-
-    "harsh braking": "Frenado brusco",
-    "hard braking": "Frenado brusco",
-    "harsh acceleration": "Aceleración brusca",
-    "hard acceleration": "Aceleración brusca",
-    "harsh cornering": "Vuelta brusca",
-    "hard cornering": "Vuelta brusca",
-
-    "idling": "Motor encendido sin movimiento",
-    "excessive idling": "Tiempo excesivo con el motor encendido sin movimiento",
-    "long idling": "Tiempo prolongado con el motor encendido sin movimiento",
-
-    "seat belt": "Cinturón de seguridad",
-    "seat belt violation": "Incumplimiento de uso del cinturón de seguridad",
-    "driver seat belt violation": "El conductor no utiliza el cinturón de seguridad",
-
-    "entering zone": "Entrada a zona",
-    "entered zone": "Ingresó a una zona",
-    "zone entry": "Entrada a zona",
-
-    "leaving zone": "Salida de zona",
-    "left zone": "Salió de una zona",
-    "zone exit": "Salida de zona",
-
     "route deviation": "Desvío de ruta",
     "route violation": "Incumplimiento de ruta",
     "unauthorized route": "Ruta no autorizada",
@@ -132,34 +117,7 @@ const TRADUCCIONES_EXACTAS = {
     "stopped": "Unidad detenida",
     "vehicle stopped": "Vehículo detenido",
     "unauthorized stop": "Detención no autorizada",
-    "excessive stop": "Detención prolongada",
-
-    "unauthorized device removal": "Retiro no autorizado del dispositivo",
-    "device unplugged": "Dispositivo desconectado",
-    "device disconnected": "Dispositivo desconectado",
-
-    "gps signal lost": "Se perdió la señal GPS",
-    "gps disconnected": "GPS desconectado",
-    "no gps signal": "Sin señal GPS",
-
-    "battery low": "Batería baja",
-    "low battery": "Batería baja",
-    "battery disconnected": "Batería desconectada",
-
-    "collision detected": "Colisión detectada",
-    "possible collision": "Posible colisión",
-    "accident detected": "Accidente detectado",
-
-    "panic button": "Botón de pánico",
-    "panic button activated": "Botón de pánico activado",
-
-    "unauthorized use": "Uso no autorizado",
-    "after hours use": "Uso fuera del horario autorizado",
-    "vehicle used after hours": "Vehículo utilizado fuera del horario autorizado",
-
-    "driver changed": "Cambio de conductor",
-    "unknown driver": "Conductor desconocido",
-    "unauthorized driver": "Conductor no autorizado"
+    "excessive stop": "Detención prolongada"
 };
 
 
@@ -168,71 +126,16 @@ const TRADUCCIONES_EXACTAS = {
 ========================================================= */
 
 const REEMPLAZOS_PARCIALES = [
-    ["speeding", "exceso de velocidad"],
-    ["speed limit", "límite de velocidad"],
-    ["maximum speed", "velocidad máxima"],
-    ["speed", "velocidad"],
-
-    ["harsh braking", "frenado brusco"],
-    ["hard braking", "frenado brusco"],
-    ["braking", "frenado"],
-
-    ["harsh acceleration", "aceleración brusca"],
-    ["hard acceleration", "aceleración brusca"],
-    ["acceleration", "aceleración"],
-
-    ["harsh cornering", "vuelta brusca"],
-    ["hard cornering", "vuelta brusca"],
-    ["cornering", "vuelta"],
-
-    ["entering", "entrada a"],
-    ["entered", "ingresó a"],
-    ["leaving", "salida de"],
-    ["left", "salió de"],
-    ["zone", "zona"],
-
     ["route deviation", "desvío de ruta"],
+    ["route violation", "incumplimiento de ruta"],
     ["route", "ruta"],
     ["deviation", "desvío"],
 
     ["vehicle stopped", "vehículo detenido"],
     ["stopped", "detenido"],
     ["stop", "detención"],
-
-    ["idling", "motor encendido sin movimiento"],
-    ["seat belt", "cinturón de seguridad"],
-
     ["unauthorized", "no autorizado"],
-    ["violation", "incumplimiento"],
-    ["exception", "excepción"],
-    ["warning", "advertencia"],
-    ["alert", "alerta"],
-
-    ["device disconnected", "dispositivo desconectado"],
-    ["device unplugged", "dispositivo desconectado"],
-    ["device", "dispositivo"],
-
-    ["gps signal lost", "se perdió la señal GPS"],
-    ["gps signal", "señal GPS"],
-
-    ["battery low", "batería baja"],
-    ["low battery", "batería baja"],
-    ["battery", "batería"],
-
-    ["collision", "colisión"],
-    ["accident", "accidente"],
-    ["driver", "conductor"],
-    ["unknown", "desconocido"],
-
-    ["after hours", "fuera del horario autorizado"],
-    ["activated", "activado"],
-    ["detected", "detectado"],
-    ["disconnected", "desconectado"],
-    ["removal", "retiro"],
-    ["exceeded", "excedido"],
-    ["excessive", "excesivo"],
-    ["maximum", "máximo"],
-    ["minimum", "mínimo"]
+    ["excessive", "prolongada"]
 ];
 
 
@@ -261,7 +164,7 @@ function mostrarAlertaAudible(texto) {
 
 
 /* =========================================================
-   TRADUCCIÓN
+   NORMALIZACIÓN
 ========================================================= */
 
 function normalizarTexto(texto) {
@@ -272,13 +175,47 @@ function normalizarTexto(texto) {
 }
 
 
+function normalizarParaComparar(texto) {
+    return texto
+        .toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+
+/* =========================================================
+   VALIDACIÓN: SOLO DESVÍO DE RUTA O DETENCIÓN
+========================================================= */
+
+function reglaDebeGenerarAudio(nombreReglaOriginal) {
+    if (!nombreReglaOriginal) {
+        return false;
+    }
+
+    const nombreNormalizado = normalizarParaComparar(nombreReglaOriginal);
+
+    return PALABRAS_PERMITIDAS.some(function (palabra) {
+        return nombreNormalizado.includes(
+            normalizarParaComparar(palabra)
+        );
+    });
+}
+
+
+/* =========================================================
+   TRADUCCIÓN
+========================================================= */
+
 function traducirNombreRegla(nombreOriginal) {
     if (!nombreOriginal) {
         return null;
     }
 
     const nombreLimpio = normalizarTexto(nombreOriginal);
-    const nombreMinusculas = nombreLimpio.toLowerCase();
+    const nombreMinusculas = normalizarParaComparar(nombreLimpio);
 
     if (TRADUCCIONES_EXACTAS[nombreMinusculas]) {
         return TRADUCCIONES_EXACTAS[nombreMinusculas];
@@ -288,7 +225,7 @@ function traducirNombreRegla(nombreOriginal) {
     let traduccionAplicada = false;
 
     REEMPLAZOS_PARCIALES.forEach(function (reemplazo) {
-        const textoIngles = reemplazo[0];
+        const textoIngles = normalizarParaComparar(reemplazo[0]);
         const textoEspanol = reemplazo[1];
 
         if (textoTraducido.includes(textoIngles)) {
@@ -310,28 +247,6 @@ function traducirNombreRegla(nombreOriginal) {
     }
 
     return nombreLimpio;
-}
-
-
-/* =========================================================
-   FILTRO DE EXCEPCIONES
-========================================================= */
-
-function excepcionDebeSerIgnorada(nombreReglaOriginal) {
-    if (!nombreReglaOriginal) {
-        return true;
-    }
-
-    const nombreNormalizado = nombreReglaOriginal
-        .toString()
-        .toLowerCase()
-        .trim();
-
-    return PALABRAS_EXCLUIDAS.some(function (palabra) {
-        return nombreNormalizado.includes(
-            palabra.toLowerCase()
-        );
-    });
 }
 
 
@@ -387,7 +302,7 @@ function probarVoz() {
 
 
 /* =========================================================
-   PRUEBA DE LA API
+   PRUEBA DE API
 ========================================================= */
 
 function probarApiGeotab() {
@@ -572,7 +487,7 @@ function cargarDatosIniciales(callbackFinal) {
 
 
 /* =========================================================
-   INICIALIZACIÓN DEL FEED
+   INICIALIZACIÓN GETFEED
 ========================================================= */
 
 function inicializarFeed(callback) {
@@ -883,7 +798,7 @@ function consultarFeedExcepciones() {
 
 
 /* =========================================================
-   PROCESAMIENTO DE EXCEPCIONES
+   PROCESAMIENTO
 ========================================================= */
 
 function procesarExcepcionNueva(excepcion) {
@@ -923,10 +838,6 @@ function procesarExcepcionNueva(excepcion) {
             excepcion.rule
         );
 
-    /*
-        Si no se puede resolver el nombre real de la regla,
-        la excepción se ignora y no produce audio.
-    */
     if (!reglaOriginal) {
         console.warn(
             "Excepción ignorada porque no se pudo resolver su regla:",
@@ -940,9 +851,9 @@ function procesarExcepcionNueva(excepcion) {
         return;
     }
 
-    if (excepcionDebeSerIgnorada(reglaOriginal)) {
+    if (!reglaDebeGenerarAudio(reglaOriginal)) {
         console.log(
-            "Excepción ignorada por filtro:",
+            "Excepción ignorada porque no es desvío de ruta ni detención:",
             {
                 unidad: unidad,
                 regla: reglaOriginal,
@@ -958,7 +869,7 @@ function procesarExcepcionNueva(excepcion) {
 
     if (!reglaTraducida) {
         console.warn(
-            "Excepción ignorada porque no se pudo traducir o procesar la regla:",
+            "Excepción ignorada porque no se pudo procesar la regla:",
             reglaOriginal
         );
 
@@ -1032,7 +943,7 @@ function crearIdentificadorAlternativo(excepcion) {
 
 
 /* =========================================================
-   NOMBRE REAL DEL ACTIVO
+   NOMBRES REALES
 ========================================================= */
 
 function obtenerNombreRealActivo(deviceRef) {
@@ -1055,10 +966,6 @@ function obtenerNombreRealActivo(deviceRef) {
     return "unidad desconocida";
 }
 
-
-/* =========================================================
-   NOMBRE REAL DE LA REGLA
-========================================================= */
 
 function obtenerNombreRealRegla(ruleRef) {
     if (!ruleRef) {
@@ -1155,7 +1062,7 @@ window.reanudarAddIn =
 
 
 /* =========================================================
-   REGISTRO DEL ADD-IN
+   REGISTRO
 ========================================================= */
 
 geotab.addin.caskaVoiceAlerts =
@@ -1178,4 +1085,3 @@ actualizarEstado(
 
 </body>
 </html>
-```
